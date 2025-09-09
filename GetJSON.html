@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>상품 코드 추출기 (v4.3)</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/xml/xml.min.js"></script>
+    
+    <style>
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Malgun Gothic', sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; background-color: #f9f9f9;
+        }
+        .container {
+            background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1 { text-align: center; color: #333; margin-bottom: 20px; }
+        .tab-container { display: flex; margin-bottom: 15px; }
+        .tab {
+            flex: 1; padding: 15px; cursor: pointer; text-align: center; background-color: #e9ecef; border: 1px solid #dee2e6;
+            border-bottom: none; font-weight: bold; font-size: 16px; transition: background-color 0.3s;
+        }
+        .tab:first-child { border-top-left-radius: 8px; }
+        .tab:last-child { border-top-right-radius: 8px; }
+        .tab.active { background-color: #fff; border-bottom: 1px solid #fff; color: #007bff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .input-group { display: flex; flex-direction: column; gap: 15px; }
+        .input-field-wrapper { display: flex; align-items: center; gap: 10px; }
+        .input-field-wrapper label { white-space: nowrap; font-weight: bold; font-size: 14px; }
+        .input-field-wrapper input {
+            width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; padding: 15px;
+        }
+        .CodeMirror {
+            border: 1px solid #ccc; border-radius: 4px; font-size: 14px; resize: vertical; overflow: auto !important;
+        }
+        .action-buttons { display: flex; gap: 10px; }
+        .action-buttons button {
+            flex: 1; padding: 15px; font-size: 16px; border: none; border-radius: 4px; font-weight: bold;
+            cursor: pointer; transition: background-color 0.3s;
+        }
+        #extract-btn { background-color: #007bff; color: white; }
+        #reset-btn { background-color: #6c757d; color: white; }
+        #result-container { margin-top: 30px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; word-break: break-all; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        #button-row { display: none; margin-top: 15px; gap: 10px; }
+        #button-row button { flex: 1; padding: 15px; }
+        .floating-buttons {
+            position: fixed; bottom: 30px; right: 30px; display: flex; flex-direction: column; gap: 10px; z-index: 1000;
+        }
+        .floating-buttons button {
+            width: 50px; height: 50px; border-radius: 50%; border: none; background-color: rgba(0, 0, 0, 0.6);
+            color: white; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: background-color 0.3s;
+        }
+        .floating-buttons button:hover { background-color: rgba(0, 0, 0, 0.8); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>상품 코드 추출기 🔑</h1>
+
+        <div class="tab-container">
+            <div class="tab active" onclick="openTab(event, 'json-tab')">JSON 기반 상품 코드 추출</div>
+            <div class="tab" onclick="openTab(event, 'html-tab')">HTML 기반 상품 코드 추출</div>
+        </div>
+
+        <div id="json-tab" class="tab-content active">
+            <div class="input-group">
+                <textarea id="json-input"></textarea>
+                <div class="input-field-wrapper">
+                    <label for="json-key-input">추출 대상 Key 입력</label>
+                    <input type="text" id="json-key-input" placeholder="따옴표를 제외한 Key 이름만 입력하세요.">
+                </div>
+            </div>
+        </div>
+
+        <div id="html-tab" class="tab-content">
+            <div class="input-group">
+                <textarea id="html-input"></textarea>
+                <div class="input-field-wrapper">
+                    <label for="html-url-input">추출 대상 URL 입력</label>
+                    <input type="text" id="html-url-input" placeholder="상품 코드 앞까지의 공통 URL을 입력하세요.">
+                </div>
+            </div>
+        </div>
+
+        <div class="action-buttons" style="margin-top: 15px;">
+            <button id="extract-btn" onclick="extractValues()">추출</button>
+            <button id="reset-btn" onclick="resetAll()">초기화</button>
+        </div>
+
+        <div id="result-container">
+            <h3 id="result-title"><strong>추출 결과</strong></h3>
+            <table id="result-table">
+                <thead><tr><th>추출된 값</th></tr></thead>
+                <tbody></tbody>
+            </table>
+            <div id="button-row">
+                <button id="export-btn" class="action-buttons" onclick="exportToCSV()">CSV 다운로드</button>
+                <button id="copy-btn" class="action-buttons" style="background-color: #ff8c00;" onclick="copyToClipboard()">클립보드로 복사</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="floating-buttons">
+        <button onclick="scrollToTop()">▲</button>
+        <button onclick="scrollToBottom()">▼</button>
+    </div>
+
+    <script>
+        // 에디터 초기화
+        const jsonEditor = CodeMirror.fromTextArea(document.getElementById("json-input"), { lineNumbers: true, mode: "application/json", theme: "default" });
+        jsonEditor.setSize("100%", 500);
+        const htmlEditor = CodeMirror.fromTextArea(document.getElementById("html-input"), { lineNumbers: true, mode: "xml", theme: "default" });
+        htmlEditor.setSize("100%", 500);
+
+        // 탭 전환
+        function openTab(evt, tabName) {
+            document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = "none");
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.classList.add('active');
+            if (tabName === 'json-tab') jsonEditor.refresh();
+            if (tabName === 'html-tab') htmlEditor.refresh();
+        }
+
+        // 엔터키 이벤트
+        document.getElementById('json-key-input').addEventListener('keyup', e => e.key === 'Enter' && extractValues());
+        document.getElementById('html-url-input').addEventListener('keyup', e => e.key === 'Enter' && extractValues());
+        
+        // 초기화
+        function resetAll() {
+            const activeTab = document.querySelector('.tab.active').getAttribute('onclick').includes('json-tab') ? 'json' : 'html';
+            if (activeTab === 'json') {
+                jsonEditor.setValue('');
+                document.getElementById('json-key-input').value = '';
+                jsonEditor.focus();
+            } else {
+                htmlEditor.setValue('');
+                document.getElementById('html-url-input').value = '';
+                htmlEditor.focus();
+            }
+            displayResults([]); // 결과창 초기화
+        }
+
+        // 추출 실행
+        function extractValues() {
+            const activeTab = document.querySelector('.tab.active').getAttribute('onclick').includes('json-tab') ? 'json' : 'html';
+            let values = [];
+            try {
+                values = (activeTab === 'json') ? extractFromJsonAsText() : extractFromHtml();
+                displayResults(values);
+            } catch (error) {
+                alert("오류가 발생했습니다: " + error.message);
+            }
+        }
+
+        // ⭐ JSON 문법과 상관없이 텍스트에서 Key-Value를 찾는 로직 ⭐
+        function extractFromJsonAsText() {
+            const textContent = jsonEditor.getValue();
+            const key = document.getElementById('json-key-input').value;
+            if (!textContent.trim() || !key.trim()) throw new Error("JSON 원본과 추출할 Key를 모두 입력해주세요.");
+            
+            // 정규표현식에 사용될 특수문자를 이스케이프
+            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // "key"\s*:\s* 다음의 값을 찾는 정규표현식
+            // 1. "..." 형태의 문자열 값, 2. 따옴표 없는 숫자/불리언 값
+            const regex = new RegExp('"' + escapedKey + '"\\s*:\\s*(?:"([^"]*)"|([\\w.-]+))', 'g');
+            
+            const matches = textContent.matchAll(regex);
+            const values = [];
+            for (const match of matches) {
+                // match[1]은 따옴표 안의 값, match[2]는 따옴표 없는 값이므로, 둘 중 존재하는 것을 추가
+                values.push(match[1] || match[2]);
+            }
+            return values;
+        }
+
+        // HTML 텍스트에서 URL 패턴 찾는 로직 (기존과 동일)
+        function extractFromHtml() {
+            const htmlString = htmlEditor.getValue();
+            const baseUrl = document.getElementById('html-url-input').value;
+            if (!htmlString.trim() || !baseUrl.trim()) throw new Error("HTML 원본과 추출 대상 URL을 모두 입력해주세요.");
+            
+            const escapedUrl = baseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escapedUrl + "([^/?&\"'\\s]+)", "g");
+            
+            return Array.from(htmlString.matchAll(regex), match => match[1]);
+        }
+
+        // 결과 표시
+        function displayResults(values) {
+            const tableBody = document.querySelector("#result-table tbody");
+            const buttonRow = document.getElementById('button-row');
+            const resultTitle = document.getElementById('result-title');
+
+            tableBody.innerHTML = '';
+            buttonRow.style.display = 'none';
+            resultTitle.innerHTML = '<strong>추출 결과</strong>';
+
+            if (values && values.length > 0) {
+                const uniqueCount = new Set(values).size;
+                resultTitle.innerHTML = `<strong>추출 결과 <span style="color: #007bff;">(총 ${values.length}건)</span> 중복제거 <span style="color: #28a745;">(${uniqueCount}건)</span></strong>`;
+                
+                values.forEach(value => {
+                    const row = tableBody.insertRow();
+                    const cell = row.insertCell();
+                    cell.textContent = value;
+                });
+                buttonRow.style.display = 'flex';
+            } else {
+                // 초기화 시에는 알림을 띄우지 않도록 체크
+                if (document.getElementById('json-key-input').value || document.getElementById('html-url-input').value) {
+                     alert('추출된 코드가 없습니다. 입력 값을 확인해주세요.');
+                }
+            }
+        }
+
+        // 클립보드 복사
+        function copyToClipboard() {
+            const values = Array.from(document.querySelectorAll("#result-table tbody td")).map(td => td.textContent);
+            if (values.length === 0) {
+                alert('복사할 내용이 없습니다.');
+                return;
+            }
+            navigator.clipboard.writeText(values.join('\n')).then(() => {
+                alert(`${values.length}개의 값이 클립보드에 복사되었습니다!`);
+            });
+        }
+
+        // CSV 다운로드
+        function exportToCSV() {
+            const table = document.getElementById("result-table");
+            let csv = [`"${table.querySelector("thead th").textContent}"`];
+            table.querySelectorAll("tbody tr").forEach(row => {
+                csv.push(`"${row.querySelector("td").textContent.replace(/"/g, '""')}"`);
+            });
+
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + csv.join("\n")));
+            link.setAttribute("download", "extracted_data.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 플로팅 버튼 스크롤
+        function scrollToTop() { window.scrollTo(0, 0); }
+        function scrollToBottom() { window.scrollTo(0, document.body.scrollHeight); }
+    </script>
+
+</body>
+</html>
